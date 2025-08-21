@@ -1,0 +1,67 @@
+name: Build & Push Microservices Docker Images
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Config Server
+      - name: Build & Push config-server
+        uses: docker/build-push-action@v5
+        with:
+          context: ./config-server
+          push: true
+          tags: ntezimanagad/config-server:latest
+
+      # Eureka Server
+      - name: Build & Push eureka-server
+        uses: docker/build-push-action@v5
+        with:
+          context: ./eureka-server
+          push: true
+          tags: ntezimanagad/eureka-server:latest
+
+      # Gateway Service
+      - name: Build & Push gateway-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./gateway-service
+          push: true
+          tags: ntezimanagad/gateway-service:latest
+
+      # User Service
+      - name: Build & Push user-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./user-service
+          push: true
+          tags: ntezimanagad/user-service:latest
+
+      # Order Service
+      - name: Build & Push order-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./order-service
+          push: true
+          tags: ntezimanagad/order-service:latest
+
+      # Product Service
+      - name: Build & Push product-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./product-service
+          push: true
+          tags: ntezimanagad/product-service:latest
