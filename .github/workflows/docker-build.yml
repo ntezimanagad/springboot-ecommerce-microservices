@@ -144,7 +144,7 @@
 #           tags: ${{ steps.ecr-login.outputs.registry }}/product-service:latest
 
 
-name: Build, Push & Deploy Microservices to ECS
+name: Build & Push Microservices Docker Images to Docker Hub & ECR
 
 on:
   push:
@@ -152,45 +152,58 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-push-deploy:
+  build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: [config-server, eureka-server, gateway-service, user-service, order-service, product-service]
+    env:
+      AWS_REGION: us-east-1
 
     steps:
-      # 1️⃣ Checkout code
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2️⃣ Configure AWS credentials
+      # 1️⃣ Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      # 3️⃣ Log in to Amazon ECR
+      # 2️⃣ Log in to Docker Hub
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 3️⃣ Log in to ECR
       - name: Login to Amazon ECR
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 4️⃣ Build & Push Docker image to ECR and Docker Hub
-      - name: Build & Push ${{ matrix.service }}
-        uses: docker/build-push-action@v5
-        with:
-          context: ./${{ matrix.service }}
-          push: true
-          platforms: linux/amd64
-          tags: |
-            ${{ steps.ecr-login.outputs.registry }}/${{ matrix.service }}:latest
-            ntezimanagad/${{ matrix.service }}:latest
+      # 4️⃣ List of services
+      - name: Set services list
+        run: echo "SERVICES=config-server eureka-server gateway-service user-service order-service product-service" >> $GITHUB_ENV
 
-      # 5️⃣ Update ECS service with new image
-      - name: Deploy ${{ matrix.service }} to ECS
+      # 5️⃣ Create missing ECR repos
+      - name: Create ECR repositories if missing
         run: |
-          aws ecs update-service \
-            --cluster my-ecs-cluster \
-            --service ${{ matrix.service }}-service \
-            --force-new-deployment
+          for SERVICE in $SERVICES; do
+            aws ecr describe-repositories --repository-names "$SERVICE" || \
+              aws ecr create-repository --repository-name "$SERVICE"
+          done
+
+      # 6️⃣ Build & Push images (both Docker Hub & ECR)
+      - name: Build & Push Docker Images
+        run: |
+          for SERVICE in $SERVICES; do
+            echo "Building $SERVICE..."
+            # Build & push to Docker Hub
+            docker build -t ntezimanagad/$SERVICE:latest ./$SERVICE
+            docker push ntezimanagad/$SERVICE:latest
+
+            # Build & push to ECR
+            ECR_URI=${{ steps.ecr-login.outputs.registry }}/$SERVICE:latest
+            docker tag ntezimanagad/$SERVICE:latest $ECR_URI
+            docker push $ECR_URI
+          done
