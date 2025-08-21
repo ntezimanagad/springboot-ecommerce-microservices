@@ -1,4 +1,150 @@
-name: Build & Push Microservices Docker Images
+# name: Build & Push Microservices Docker Images
+
+# on:
+#   push:
+#     branches: [ "main" ]
+#   workflow_dispatch:
+
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout Code
+#         uses: actions/checkout@v4
+
+#       - name: Log in to Docker Hub
+#         uses: docker/login-action@v2
+#         with:
+#           username: ${{ secrets.DOCKERHUB_USERNAME }}
+#           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+#       # Config Server
+#       - name: Build & Push config-server
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./config-server
+#           push: true
+#           tags: ntezimanagad/config-server:latest
+
+#       # Eureka Server
+#       - name: Build & Push eureka-server
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./eureka-server
+#           push: true
+#           tags: ntezimanagad/eureka-server:latest
+
+#       # Gateway Service
+#       - name: Build & Push gateway-service
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./gateway-service
+#           push: true
+#           tags: ntezimanagad/gateway-service:latest
+
+#       # User Service
+#       - name: Build & Push user-service
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./user-service
+#           push: true
+#           tags: ntezimanagad/user-service:latest
+
+#       # Order Service
+#       - name: Build & Push order-service
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./order-service
+#           push: true
+#           tags: ntezimanagad/order-service:latest
+
+#       # Product Service
+#       - name: Build & Push product-service
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./product-service
+#           push: true
+#           tags: ntezimanagad/product-service:latest
+
+
+# name: Build & Push Microservices Docker Images to ECR
+
+# on:
+#   push:
+#     branches: [ "main" ]
+#   workflow_dispatch:
+
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout Code
+#         uses: actions/checkout@v4
+
+#       # 1️⃣ Configure AWS credentials
+#       - name: Configure AWS credentials
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: us-east-1
+
+#       # 2️⃣ Login to ECR
+#       - name: Login to Amazon ECR
+#         id: ecr-login
+#         uses: aws-actions/amazon-ecr-login@v2
+
+#       # 3️⃣ Build & Push Config Server
+#       - name: Build & Push config-server
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./config-server
+#           push: true
+#           tags: ${{ steps.ecr-login.outputs.registry }}/config-server:latest
+
+#       # 4️⃣ Build & Push Eureka Server
+#       - name: Build & Push eureka-server
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./eureka-server
+#           push: true
+#           tags: ${{ steps.ecr-login.outputs.registry }}/eureka-server:latest
+
+#       # 5️⃣ Build & Push Gateway Service
+#       - name: Build & Push gateway-service
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./gateway-service
+#           push: true
+#           tags: ${{ steps.ecr-login.outputs.registry }}/gateway-service:latest
+
+#       # 6️⃣ Build & Push User Service
+#       - name: Build & Push user-service
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./user-service
+#           push: true
+#           tags: ${{ steps.ecr-login.outputs.registry }}/user-service:latest
+
+#       # 7️⃣ Build & Push Order Service
+#       - name: Build & Push order-service
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./order-service
+#           push: true
+#           tags: ${{ steps.ecr-login.outputs.registry }}/order-service:latest
+
+#       # 8️⃣ Build & Push Product Service
+#       - name: Build & Push product-service
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./product-service
+#           push: true
+#           tags: ${{ steps.ecr-login.outputs.registry }}/product-service:latest
+
+
+name: Build, Push & Deploy Microservices to ECS
 
 on:
   push:
@@ -6,62 +152,45 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-push-deploy:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [config-server, eureka-server, gateway-service, user-service, order-service, product-service]
+
     steps:
+      # 1️⃣ Checkout code
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+      # 2️⃣ Configure AWS credentials
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
-      # Config Server
-      - name: Build & Push config-server
+      # 3️⃣ Log in to Amazon ECR
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 4️⃣ Build & Push Docker image to ECR and Docker Hub
+      - name: Build & Push ${{ matrix.service }}
         uses: docker/build-push-action@v5
         with:
-          context: ./config-server
+          context: ./${{ matrix.service }}
           push: true
-          tags: ntezimanagad/config-server:latest
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ matrix.service }}:latest
+            ntezimanagad/${{ matrix.service }}:latest
 
-      # Eureka Server
-      - name: Build & Push eureka-server
-        uses: docker/build-push-action@v5
-        with:
-          context: ./eureka-server
-          push: true
-          tags: ntezimanagad/eureka-server:latest
-
-      # Gateway Service
-      - name: Build & Push gateway-service
-        uses: docker/build-push-action@v5
-        with:
-          context: ./gateway-service
-          push: true
-          tags: ntezimanagad/gateway-service:latest
-
-      # User Service
-      - name: Build & Push user-service
-        uses: docker/build-push-action@v5
-        with:
-          context: ./user-service
-          push: true
-          tags: ntezimanagad/user-service:latest
-
-      # Order Service
-      - name: Build & Push order-service
-        uses: docker/build-push-action@v5
-        with:
-          context: ./order-service
-          push: true
-          tags: ntezimanagad/order-service:latest
-
-      # Product Service
-      - name: Build & Push product-service
-        uses: docker/build-push-action@v5
-        with:
-          context: ./product-service
-          push: true
-          tags: ntezimanagad/product-service:latest
+      # 5️⃣ Update ECS service with new image
+      - name: Deploy ${{ matrix.service }} to ECS
+        run: |
+          aws ecs update-service \
+            --cluster my-ecs-cluster \
+            --service ${{ matrix.service }}-service \
+            --force-new-deployment
